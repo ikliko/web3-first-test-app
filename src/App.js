@@ -2,19 +2,50 @@ import React, {Component} from "react";
 
 import logo from './logo.svg';
 import './App.css';
+import {Moralis} from "moralis";
 
+// function App() {
+//     const { authenticate, isAuthenticated, user } = useMoralis();
+//
+//     if (!isAuthenticated) {
+//         return (
+//             <div>
+//                 <button onClick={() => authenticate()}>Authenticate</button>
+//             </div>
+//         );
+//     }
+//
+//     Moralis.Web3.getAllERC20()
+//         .then(data => {
+//             console.log(data);
+//         });
+//
+//     return (
+//         <div>
+//             <h1>Welcome {user.get("username")}</h1>
+//         </div>
+//     );
+// }
+
+const defaultState = {
+    isMetamaskInstalled: false,
+    isMetamaskConnected: false,
+    isLoading: true,
+    isMainnet: false,
+    chains: null,
+    chain: null,
+    account: null,
+    amount: 0,
+    moralisUser: null,
+    tokensInfo: null
+};
 
 class App extends Component {
+
     constructor(props) {
         super(props);
 
-        this.state = {
-            isMetamaskInstalled: false,
-            isMetamaskConnected: false,
-            chains: null,
-            chain: null,
-            account: null
-        };
+        this.state = defaultState;
     }
 
     componentWillMount() {
@@ -27,21 +58,64 @@ class App extends Component {
                 });
 
                 setTimeout(() => {
-                    this.initWalletConnect();
+
+                    // detectEthereumProvider()
+                    //     .then(data => {
+                    //         console.log(data);
+                    //     });
+
+                    // ethereum
+                    //     .request({method: 'eth_accounts'})
+                    //     .then(data => {
+                    //
+                    //
+                            this.initWalletConnect();
+                    //     })
+                    //     .catch((err) => {
+                    //         // Some unexpected error.
+                    //         // For backwards compatibility reasons, if no accounts are available,
+                    //         // eth_accounts will return an empty array.
+                    //         console.warn(err);
+                    //     });
                 })
             });
 
+        const {ethereum} = window;
 
-        window.ethereum.on('accountsChanged', (accounts) => {
+        if (!ethereum) {
             this.setState({
                 ...this.state,
-                account: accounts[0]
+                isLoading: false
             });
+
+            return;
+        }
+
+        ethereum.on('accountsChanged', accounts => {
+            if (!accounts.length) {
+                Moralis.User.logOut()
+                    .then(data => {
+                        this.setState(defaultState);
+                        this.initWalletConnect();
+                    });
+
+
+                return;
+            }
+
         });
 
         // detect Network account change
-        window.ethereum.on('chainChanged', (networkId) => {
-            console.log('networkChanged', networkId);
+        window.ethereum.on('chainChanged', () => {
+            this.initWalletConnect();
+        });
+
+        ethereum.on('disconnect', () => {
+            console.log(123);
+            Moralis.User.logOut()
+                .then(data => {
+                    this.setState(defaultState);
+                })
         });
     }
 
@@ -60,15 +134,28 @@ class App extends Component {
 
     render() {
         const {
-            chains,
             chain,
             isMetamaskInstalled,
             isMetamaskConnected,
-            account
+            isLoading,
+            isMainnet,
+            account,
+            amount,
+            tokensInfo
         } = this.state;
 
-        console.log(chain);
+        if (!chain && isLoading) {
+            return (
+                <div className="App">
+                    <header className="App-header">
+                        <img src={logo} className="App-logo" alt="logo"/>
+                        Loading...
+                    </header>
+                </div>
+            )
+        }
 
+        console.log(tokensInfo);
 
         return (
             <div className="App">
@@ -78,16 +165,16 @@ class App extends Component {
                         !isMetamaskInstalled && (
                             <div>
                                 <p>
-                                    No metamask installed. Please install metamask.
-                                </p>
-                                <a
+                                    No metamask detected. <a
                                     className="App-link"
                                     href="https://metamask.io/"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
-                                    Install metamask
-                                </a>
+                                    Download Metamask
+                                </a>.
+                                </p>
+
                             </div>
                         )
                     }
@@ -107,8 +194,48 @@ class App extends Component {
                                 <div>
                                     <p>
                                         Network: {chain.name}
+                                        {
+                                            !isMainnet && (
+                                                <a onClick={this.switchToEthereumMainnet}>
+                                                    <strong> &lt;-SWITCH TO MAINNET</strong>
+                                                </a>
+                                            )
+                                        }
+                                    </p>
+
+                                    <p>
+                                        Amount: {amount} {chain.nativeCurrency.symbol}
                                     </p>
                                 </div>
+                            </div>
+                        )
+                    }
+                    <hr/>
+                    {
+                        tokensInfo && (
+                            <div>
+                                <h2>Tokens Info</h2>
+                                <hr/>
+
+                                {
+                                    tokensInfo.map((token, i) => (
+                                        <div key={i}>
+                                            <p>
+                                                {token.name} ({token.symbol})
+                                            </p>
+
+                                            <p>
+                                                Decimals: {token.decimals}
+                                            </p>
+
+                                            <p>
+                                                Balance: {token.readableBalance}
+                                            </p>
+
+                                            <hr/>
+                                        </div>
+                                    ))
+                                }
                             </div>
                         )
                     }
@@ -127,12 +254,18 @@ class App extends Component {
                     const chainId = parseInt(data, 16);
 
                     let chain = chains.find(c => c.chainId === chainId);
+
+                    if (!chain) {
+                        return;
+                    }
+
                     this.setState({
                         ...this.state,
-                        chain
+                        isMainnet: chain.name.toLowerCase().includes('mainnet'),
+                        chain,
+                        isLoading: false
                     })
                 });
-
 
 
             this.setState({
@@ -152,6 +285,11 @@ class App extends Component {
                     });
 
                     setTimeout(() => {
+                        if(!account) {
+                            return;
+                        }
+
+                        this.loadMoralisData();
                         this.getBalance();
                     })
                 });
@@ -166,125 +304,81 @@ class App extends Component {
             method: 'eth_getBalance',
             params: [
                 this.state.account,
-                // '0x407d73d8a49eeb85d32cf465507dd71d507100c1',
                 'latest'
             ]
 
         })
             .catch(e => console.log(e))
             .then(data => {
-                console.log(data);
+                this.setState({
+                    ...this.state,
+                    amount: this.parseBalance(data)
+                })
             })
     }
-}
 
-// function App() {
-//     const [account, setAccount] = useState(null);
-//     const [isMetamaskInstalled, setIsMetamaskInstalled] = useState(false);
-//     const [isMetamaskConnected, setIsMetamaskConnected] = useState(false);
-//     const [chain, setChain] = useState(null);
-//     const [chains, setChains] = useState(null);
-//     fetch('https://chainid.network/chains.json')
-//         .then(res => res.json())
-//         .then(res => {
-//             setChains(res);
-//         });
-//
-//     // useEffect(() => {
-//     //     if(chain) {
-//     //         return;
-//     //     }
-//     //
-//     //     window.ethereum.on('accountsChanged', (accounts) => {
-//     //         setAccount(accounts[0]);
-//     //     });
-//     //
-//     //     // detect Network account change
-//     //     window.ethereum.on('chainChanged', (networkId) => {
-//     //         console.log('networkChanged', networkId);
-//     //     });
-//     //
-//     //     return () => {
-//     //     }
-//     // }, []);
-//     //
-//     // useEffect((chains) => {
-//     //     if(!chains) {
-//     //         return;
-//     //     }
-//     //
-//     //     if (typeof window.ethereum !== 'undefined') {
-//     //         setIsMetamaskInstalled(true);
-//     //
-//     //         let chain = chains.find(c => c.chainId === +window.ethereum.networkVersion);
-//     //
-//     //         if (!chain) {
-//     //             // todo
-//     //         }
-//     //         setChain(chain);
-//     //         window.ethereum.request({method: 'eth_accounts'})
-//     //             .catch(e => console.log(e))
-//     //             .then(data => {
-//     //                 setIsMetamaskConnected(!!data.length);
-//     //                 setAccount(data[0]);
-//     //             });
-//     //     }
-//     // }, [chains]);
-//     //
-//     // let connectWallet = () => {
-//     //     window.ethereum.request({method: 'eth_requestAccounts'})
-//     //         .catch(e => console.log(e))
-//     //         .then(data => {
-//     //             console.log(data);
-//     //             setIsMetamaskConnected(!!data.length)
-//     //         });
-//     // };
-//
-//
-//     return (
-//         <div className="App">
-//             <header className="App-header">
-//                 {!chains && 'no'}
-//                 <img src={logo} className="App-logo" alt="logo"/>
-//                 {
-//                     !isMetamaskInstalled && (
-//                         <div>
-//                             <p>
-//                                 No metamask installed. Please install metamask.
-//                             </p>
-//                             <a
-//                                 className="App-link"
-//                                 href="https://metamask.io/"
-//                                 target="_blank"
-//                                 rel="noopener noreferrer"
-//                             >
-//                                 Install metamask
-//                             </a>
-//                         </div>
-//                     )
-//                 }
-//                 {
-//                     isMetamaskInstalled && !isMetamaskConnected && (
-//                         <div>
-//                             <button onClick={connectWallet}>Connect wallet</button>
-//                         </div>
-//                     )
-//                 }
-//                 {
-//                     isMetamaskInstalled && isMetamaskConnected && (
-//                         <div>
-//                             <p>
-//                                 Address connected: {account}
-//                             </p>
-//                             <p>
-//
-//                             </p>
-//                         </div>
-//                     )
-//                 }
-//             </header>
-//         </div>
-//     );
-// }
+    parseBalance(amount, decimals = 18) {
+        return amount / Math.pow(10, decimals);
+    }
+
+    switchToEthereumMainnet() {
+        const {ethereum} = window;
+
+        ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [
+                {
+                    chainId: `0x${(1).toString(16)}`
+                }
+            ]
+        })
+            .catch(e => console.log(e))
+            .then(success => {
+                if (success) {
+                    this.initWalletConnect();
+                }
+            })
+    }
+
+    getTokensBalances() {
+        Moralis.Web3.getAllERC20()
+            .then(data => {
+                this.setState({
+                    ...this.state,
+                    tokensInfo: this.parseTokensBalance(data)
+                })
+            });
+    }
+
+    loadMoralisData() {
+        const user = Moralis.User.current();
+
+        if (!user) {
+            Moralis.Web3.authenticate()
+                .catch(e => console.warn)
+                .then(account => {
+                    this.setState({
+                        ...this.state,
+                        moralisUser: account
+                    });
+
+                    setTimeout(() => {
+                        this.getTokensBalances();
+                    })
+                });
+
+            return;
+        }
+
+        this.getTokensBalances();
+    }
+
+    parseTokensBalance(tokens) {
+        return tokens.map(token => ({
+            ...token,
+            readableBalance: this.parseBalance(token.balance, token.decimals)
+        }));
+    }
+}
 
 export default App;
