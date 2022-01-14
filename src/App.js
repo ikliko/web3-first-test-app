@@ -103,32 +103,22 @@ class App extends Component {
                 return;
             }
 
-            Moralis.User.logOut()
-                .then(data => {
-                    this.setState(defaultState);
-
-                    Moralis.Web3.authenticate()
-                        .catch(e => console.warn)
-                        .then(account => {
-                            this.setState({
-                                ...this.state,
-                                moralisUser: account
-                            });
-
-                            setTimeout(() => {
-                                window.location.href= window.location.href;
-                                // this.initWalletConnect();
-                                // this.getTokensBalances();
-                            })
-                        });
-                });
+            this.reloadMoralisData();
 
 
         });
 
         // detect Network account change
         ethereum.on('chainChanged', () => {
-            this.initWalletConnect();
+            Moralis.User.logOut()
+                .then(data => {
+                    window.location.href = window.location.href
+                    // this.setState(defaultState);
+                    //
+                    // setTimeout(() => {
+                    //     this.initWalletConnect();
+                    // });
+                });
         });
 
         ethereum.on('disconnect', () => {
@@ -309,7 +299,10 @@ class App extends Component {
                             return;
                         }
 
-                        this.loadMoralisData();
+                        if(this.state.chain && this.state.chain.chainId === 1) {
+                            this.loadMoralisData();
+                        }
+
                         this.getBalance();
                     })
                 });
@@ -398,6 +391,28 @@ class App extends Component {
             ...token,
             readableBalance: this.parseBalance(token.balance, token.decimals)
         }));
+    }
+
+    reloadMoralisData() {
+        Moralis.User.logOut()
+            .then(data => {
+                this.setState(defaultState);
+
+                Moralis.Web3.authenticate()
+                    .catch(e => console.warn)
+                    .then(account => {
+                        this.setState({
+                            ...this.state,
+                            moralisUser: account
+                        });
+
+                        setTimeout(() => {
+                            window.location.href= window.location.href;
+                            // this.initWalletConnect();
+                            // this.getTokensBalances();
+                        })
+                    });
+            });
     }
 }
 
