@@ -103,15 +103,35 @@ class App extends Component {
                 return;
             }
 
+            Moralis.User.logOut()
+                .then(data => {
+                    this.setState(defaultState);
+
+                    Moralis.Web3.authenticate()
+                        .catch(e => console.warn)
+                        .then(account => {
+                            this.setState({
+                                ...this.state,
+                                moralisUser: account
+                            });
+
+                            setTimeout(() => {
+                                window.location.href= window.location.href;
+                                // this.initWalletConnect();
+                                // this.getTokensBalances();
+                            })
+                        });
+                });
+
+
         });
 
         // detect Network account change
-        window.ethereum.on('chainChanged', () => {
+        ethereum.on('chainChanged', () => {
             this.initWalletConnect();
         });
 
         ethereum.on('disconnect', () => {
-            console.log(123);
             Moralis.User.logOut()
                 .then(data => {
                     this.setState(defaultState);
